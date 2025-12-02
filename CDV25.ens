@@ -1,0 +1,457 @@
+; Autor: 240257; Gutierrez Bravo, Diego
+; Grupo: 3SM1-PARS 
+; Practica Estructura de Computadores: 2025-2026
+
+
+
+; Macros que hemos visto en clase y pueden serme utiles a lo largo del proyecto
+
+LEA:    MACRO (re, ETIQ)
+        or re, r0,  low(ETIQ)
+        or.u re, re, high(ETIQ)
+        ENDMACRO
+
+DBNZ:   MACRO (re, ETIQ)
+        sub	re, re, 1
+        cmp	r2, re, r0
+        bb0	eq, r2, ETIQ
+        ENDMACRO
+		  
+LOAD: 	MACRO (re, ETIQ)
+        LEA (re, ETIQ)
+        ld	re, re, r0
+        ENDMACRO
+
+PUSH:   MACRO (re)
+        subu r30, r30, 4
+        st re, r30, r0
+        ENDMACRO
+
+POP:    MACRO (re)
+        ld re, r30, r0
+        addu r30, r30, 4
+        ENDMACRO
+
+
+org 4000
+
+;data para LongCad
+;cadena: data "trestristestigrescomentrigoenuntrigal\0" ;	37 caracteres --> 25 en hexadecimal
+
+;data para CoincidenCad
+;cadena1: data "12*3456789012*3456789012*3456789012*3456789012*3456789012*34567890\0"
+;cadena2: data "12*3456789012*3456789012*345678901*3456789012*3456789012*34567890\0"
+
+;data para BuscaCar
+
+;ref: data "*2345*78*0\0"
+;ref2: data 0x40302010, 0x80706050, 0xA090
+;ref3: data "1234578*0\0"
+
+;dirPoneBItA1: data 0xFFFFFF00
+;mapaBits: data 0x54		; 0101 0100
+
+START:
+
+	; Pruebas
+		or r30, r0, 0x7000		; coloco pila
+		
+		;prueba LongCad	
+
+		;LEA (r22, cadena)
+		;PUSH (r22)
+		;bsr LongCad
+		;POP (r22)
+		
+
+		;Prueba CoincidenCad
+
+		;LEA (r21, cadena1)		; guardo cadena1 en r21
+		;LEA (r22, cadena2)		; fuardo cadena 2 en r22
+		;PUSH (r21)
+		;PUSH (r22)
+		;bsr CoincidenCad
+		;POP (r22)
+		;POP (r21)
+
+
+		;Prueba BuscaCar
+
+		;LEA (r22, ref2)
+		;or r23, r0, 0x04		; from	
+		;or r24, r0, 0x0A		; to
+		;or r25, r0, 0xA0		; C
+		;PUSH (r24)
+		;PUSH (r23)
+		;PUSH (r22)
+		;PUSH (r25)			
+		;bsr BuscaCar
+		;POP (r25)
+		;POP (r22)
+		;POP (r23)
+		;POP (r24)
+
+
+		;Prueba PoneBitA1
+		;LEA (r20, dirPoneBItA1)
+		;or r21, r0, 0x04
+		;PUSH (r21)
+		;PUSH (r20)
+		;bsr PoneBitA1
+		;POP (r20)
+		;POP (r21)
+		
+		;Prueba LeeBit
+		;LEA (r20, mapaBits)
+		;or r21, r0, 0x03
+		;PUSH (r21)
+		;PUSH (r20)
+		;bsr LeeBit
+		;POP (r20)
+		;POP (r21)
+
+
+		;Prueba Comprime
+		LEA (r20, texto)
+		LEA (r21, comprdo)
+		PUSH (r21)
+		PUSH (r20)
+		bsr Comprime
+		POP (r20)
+		POP (r21)
+
+
+END: stop
+
+Verifica:	jmp(r1)
+
+
+; Comprime (texto, comprdo)
+Comprime:   
+
+		PUSH (r1)
+		PUSH (r31)						; Creo el marco de pila
+		or r31, r30, r30				; para poder llamar a subrutinas sin problemas
+		subu r30, r30, 8				; reservo espacio para guardar texto y cmprdo y pilaZona3
+		or r29, r0, r0					; como la mayoria de subrutinas devuelven el res en r29, me aseguro
+										; que este iniciado a 0, aunq ya lo hago dentro de casi todas las subrutinas
+
+		ld r20, r30, 8					; texto <- r20
+		ld r21, r30, 12					; cmprdo <- r21
+
+		; 1 Determinar long de texto llamando a LongCad
+
+		st r20, r31, -4					; r31 - 4 <= texto
+		st r21, r31, -8					; r31 - 8 <= cmprdo
+
+		PUSH (r20)						; paso la cadena texto por la pila
+		bsr LongCad						; llamo a longCad que me deuvlve la longitud en r29
+		addu r30, r30, 4				; recupero puntero r30
+
+		ld r20, r31, -4					; texto <- r20
+		ld r21, r31, -8					; cmprdo <- r21
+
+		cmp r7, r29, -1
+		bb1 eq, r7, fin_comprime		; REVISAR comprobacion 
+		or r3, r29, r29					; guardo la long de la cadena en r3
+
+		; 2 Reservar espacio vl pilaZona3
+
+		divu r4, r3, 4
+		mulu r4, r4, 4					; en r4 <- num de bytes de texto ajustado por exceso a mult de 4
+		subu r30, r30, r4				; se reservan r4 bytes vl
+
+		; 3 Iniz variables
+
+		or r5, r0, r0					; r5 <= desplazamiento/contador 1
+		or r4, r0, r0					; r4 <= desplazamiento/contador 2
+		or r6, r0, r0					; r6 <= nBit del mapa de bits
+		subu r8, r31, 12				; r8 <- pilaZona3
+
+		; 4 Copia de los 8xM (M=1) chars iniciales de texto al comienzo de pilaZona3
+
+	cop_8x1:
+
+		cmp r7, r4, 8
+		bb1 eq, r7, buc_Comprime		
+		ld.bu r10, r20, r4				; cargo char en r10
+		st.b r10, r8, r4				; guardo r10 en pilaZona3
+		addu r4, r4, 1					; Avanzo pos en texto y pilaZona3 y uso r4 como contador
+		br cop_8x1
+		
+
+		; 5 Algoritmo compirmir
+
+	buc_Comprime:
+
+
+
+		; 6 rellenar cabecera de comprdo
+
+		; 7 Copiar pilaZona3 en cmprdo tras mapa de bytes
+
+		; 8 valores de retorno
+
+	fin_comprime:
+
+		or r30, r31, r31		; destruir marco de pila
+		POP (r31)
+		POP (r1)
+		jmp(r1)
+
+Descomprime:    jmp(r1)
+
+LongCad:
+		PUSH (r1)
+		ld r22, r30, 4				; paso el valor de cadena a r22
+		or r29, r0, r0				; pongo r29 a 0, que hes donde hay que guardar el resultado
+
+	sig_char_LongCad:	
+		ld.bu r5, r22, r0			; guardo en r5 el primer byte sin signo de la cadena
+		cmp r7, r5, 0				; comparo el siguiente bit con \0
+		bb1 eq, r7, end_longCad		; si el sig bit tampoco es \0 sigo, sino end_longCad
+		addu r29, r29, 1			; aumento el resultado
+		addu r22, r22, 1			; paso al sig byte de la cadena
+		br sig_char_LongCad
+
+	end_longCad:
+		POP (r1)
+		jmp(r1)
+
+CoincidenCad:   
+		PUSH(r1)
+		ld r21, r30, 8			; cadena2
+		ld r22, r30, 4			; cadena1
+		or r29, r0, r0
+
+	sig_char_CoincidenCad:
+		ld.bu r5, r21, r0
+		ld.bu r6, r22, r0
+		cmp r7, r5, 0
+		bb1 eq, r7, end_coincidenCad	;comparo que ambas cadenas no hayan terminado (llegar a \0)
+		cmp r7, r6, 0
+		bb1 eq, r7, end_coincidenCad
+		cmp r7, r5, r6			; comparo si el el byte es el mismo
+		bb0 eq, r7, end_coincidenCad
+		addu r29, r29, 1		; si sin igaules r7 = 1 y entonces suma 1 al resultado
+		addu r21, r21, 1
+		addu r22, r22, 1
+		br sig_char_CoincidenCad
+		
+	end_coincidenCad:		
+		POP (r1)
+		jmp(r1)
+
+BuscaCar:       
+
+		PUSH (r1)
+		
+		ld r25, r30, 4			; r25 -> C
+		ld r22, r30, 8			; r22 -> ref
+		ld r23, r30, 12			; r23 -> from
+		ld r24, r30, 16			; to
+		or r29, r23, r0			; r29 -> rv  empieza en from
+
+	sig_char_BuscaCar:
+
+		ld.bu r5, r22, r29			; r29=from para la primera iteracion
+
+		cmp r7, r29, r24			; comparar que no haya llegado a to
+		bb1 eq, r7, end_BuscaCar
+
+		cmp r7, r5, r25				; comprueba si ha encontrado el char C
+		bb1 eq, r7, end_BuscaCar
+
+		addu r29, r29, 1			; avanza al siguiente byte
+		br sig_char_BuscaCar
+
+	end_BuscaCar:
+
+		POP (r1)
+		jmp(r1)
+
+PoneBitA1:      PUSH (r1)
+
+		ld r20, r30, 4				; dirZonaCB <-- r20
+		ld r21, r30, 8				; NumBit <-- r21
+		or r8, r21, r21				; r8 contador
+		or r10, r0, r0				; pos del byte respecto a r20
+		or r9, r0, 0x80				; r9 iniciado a 1000 0000 (pos del bit 0 a 1)
+
+	buc_Byte_pb:
+
+		cmp r7, r8, 7
+		bb1 ls, r7, enc_Byte_pb		
+		addu r10, r10, 1			; sig byte
+		subu r8, r8, 8				; resta a NumBit 8 bits(1 byte)
+		br buc_Byte_pb	
+	
+	enc_Byte_pb:
+
+		ld.bu r4, r20, r10				; guardo en r4 el byte
+
+	buc_masc_pb:
+
+		cmp r7, r8, 0
+		bb1 eq, r7, fin_poneBitA1			; si ha llegado al bit 
+		divu r6, r9, 2					; divide entre dos
+		addu r9, r6, r0					; (mueve el bit a 1 hacia la derecha, como un SHR)
+		subu r8, r8, 1					; actualiza contador
+		br buc_masc_pb
+		
+
+	fin_poneBitA1:	
+		
+		or r4, r4, r9					; cambia bit y
+		st.b r4, r20, r10				; lo guarda en mem
+
+		POP (r1)
+		jmp(r1)
+
+LeeBit:         PUSH (r1)
+
+		ld r20, r30, 4				; dirZonaCB <-- r20
+		ld r21, r30, 8				; NumBit <-- r21
+		or r8, r21, r21				; r8 contador
+		or r10, r0, r0				; pos del byte respecto a r20
+		or r9, r0, 0x80				; r9 iniciado a 1000 0000 (pos del bit 0 a 1)
+		or r29, r0, r0
+
+	buc_Byte_lb:
+
+		cmp r7, r8, 7
+		bb1 ls, r7, enc_Byte_lb		
+		addu r10, r10, 1			; sig byte
+		subu r8, r8, 8				; resta a NumBit 8 bits(1 byte)
+		br buc_Byte_lb	
+	
+	enc_Byte_lb:
+
+		ld.bu r4, r20, r10				; guardo en r4 el byte
+
+	buc_masc_lb:
+
+		cmp r7, r8, 0
+		bb1 eq, r7, bit_es_1o0				; si ya a llegado al bit, que identifique si es 1 o 0 
+		divu r6, r9, 2					; divide entre dos 
+		addu r9, r6, r0					; (mueve el bit a 1 hacia la derecha, como un SHR)
+		subu r8, r8, 1					; actualiza contador
+		br buc_masc_lb
+		
+
+	bit_es_1o0:	
+						
+		and r5, r4, r9					; hago un and para ver si el bit era 0 o 1
+		cmp r7, r5, r0					; y compruebo si el valor cambia o no comparado con antes del and
+		bb1 eq, r7, fin_LeeBit			; r5 = 0?: el bit era 0 (r29 se inicia a 0 asiq no hay que hacer nada)
+		or r29, r0, 1					; r5 != 0?: el bit era 1
+		br fin_LeeBit					; no haria falta, pero por si modifico algo
+
+	fin_LeeBit:
+
+		POP (r1)
+		jmp (r1)
+
+
+;
+; Debe incorporar este fichero con TODAS sus líneas, sin modificar
+; ninguna de ellas, al final de su archivo CDV24.ens
+;
+; Este aviso se refiere también a las líneas de comentario
+; 
+;
+;; Grupo:    240257 - Fri Oct 24 13:25:00 CEST 2025
+
+BuscaMax:
+	PUSH (r1)
+	PUSH (r31)
+	or   r31, r30, 0
+	or   r28, r0, 0x307D
+	PUSH (r28)
+
+	ld   r10, r31, 8;  REF
+	ld   r11, r31, 12; MAX
+	ld   r12, r31, 16; Dir(JJ)
+
+	sub  r5, r0, 1		; guarda -1 en *JJ por si no se
+	st   r5, r12, 0		; encuentran coincidencias
+
+	addu r27, r0, r0  ; P
+	addu r28, r0, r0  ; L
+
+BucBM:
+	ld.bu r20, r10, r11	; C=REF(max)
+
+				; Reserva registros que
+				; necesita conservar
+	PUSH (r28) 	    	; L
+	PUSH (r11)	    	; MAX
+
+	     		    	; Parámetros de BuscaCar
+	PUSH (r27)	    	; P
+	PUSH (r10)	    	; REF
+	PUSH (r20)	   	; C
+	bsr  BuscaCar
+	POP  (r20)
+	POP  (r10)
+	POP  (r27)
+
+	POP  (r11)		; Recupera registros
+	POP  (r28)	        ; salvaguardados
+
+	cmp  r5, r29, r11	; nuevo P es >= MAX ??
+	bb1  hs, r5, finBM
+	addu r27, r29, r0	; P = nuevo P
+	
+	addu r13, r10, r27	; *REF(P)
+	addu r14, r10, r11 	; *REF(max)	
+
+	PUSH (r11)     		; Reserva registros que
+	PUSH (r10)		; necesita conservar
+	PUSH (r28)
+	PUSH (r27)
+	
+	PUSH (r14)		; Parámetros de CoincidenCad
+	PUSH (r13)
+	bsr  CoincidenCad
+	POP  (r13)
+	POP  (r14)
+	
+	POP  (r27)		; Recupera registros
+	POP  (r28)		; salvaguardados
+	POP  (r10)
+	POP  (r11)
+
+	cmp r5, r29, r28	; Comprueba si longitud > L
+	bb1 le, r5, contBM	; Si no lo es, continúa
+	cmp r5, r29, 255	; Comprueba si longitud > 255
+	bb1 le, r5, noLimBM	; Si no lo es, continúa
+	addu r29, r0, 255	; Si lo es, limita su valor a 255
+	
+noLimBM:
+	addu r28, r29, r0	; actualiza L
+	ld   r12, r31, 16	; Dir(JJ)
+	st   r27, r12, r0	; actualiza P en *JJ
+	bb1 ge, r5, finBM	; Si coincidencia >= 255 termina
+contBM: 
+	addu r27, r27, 1	; Pasa al siguiente carácter
+	cmp  r5, r27, r11	; Es P>=max ?
+	bb1  hs, r5, finBM
+	
+	br   BucBM   		; Nueva búsqueda del primer carácter
+
+finBM:
+	addu r29, r28, r0	; asigna L al valor de retorno r29
+	  
+	or   r27, r0, 0x416
+	POP  (r28)
+
+	or   r30, r31, 0
+	POP  (r31)
+	POP  (r1)
+	jmp  (r1)
+;; Grupo:    240257
+
+
+
+
