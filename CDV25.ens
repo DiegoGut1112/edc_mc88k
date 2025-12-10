@@ -353,12 +353,12 @@ Descomprime:
 		;cmp r7, r4, 8
 		;bb1 eq, r7, buc_Comprime		; r4 se queda apuntando al sig char, al 9º (o num 8)
 		;ld.bu r10, r20, r4				; char en r10
-		st.b r10, r8, r5				; guardo r10 en pilaZona3
-		addu r4, r4, 1					; Avanzo posTexto y posPilaZona3%
-		addu r5, r5, 1
+		;st.b r10, r8, r5				; guardo r10 en pilaZona3
+		;addu r4, r4, 1					; Avanzo posTexto y posPilaZona3%
+		;addu r5, r5, 1
 
-		br cop_8x1_desc
-		
+		;br cop_8x1_desc
+
 
 
 		or r30, r31, r31
