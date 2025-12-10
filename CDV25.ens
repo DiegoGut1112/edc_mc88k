@@ -170,7 +170,7 @@ Comprime:
 
 		; 4 Copia de los 8xM (M=1) chars iniciales de texto al comienzo de pilaZona3
 
-	cop_8x1:
+	cop_8x1_comp:
 
 		cmp r7, r4, 8
 		bb1 eq, r7, buc_Comprime		; r4 se queda apuntando al sig char, al 9º (o num 8)
@@ -179,8 +179,7 @@ Comprime:
 		addu r4, r4, 1					; Avanzo posTexto y posPilaZona3%
 		addu r5, r5, 1
 
-		br cop_8x1
-		
+		br cop_8x1_comp
 
 		; 5 Algoritmo compirmir
 
@@ -334,26 +333,47 @@ Comprime:
 
 
 
-
-
-
-
-
 Descomprime:   
 
 		PUSH (r1)
 		PUSH (r31)
 		or r31, r30, r30
+		subu r30, r30, 20
+		or r29, r0, r0
 
+		ld r20, r31, 8					; com <- r20
+		ld r21, r31, 12					; desc <- r21
 
+		or r4, r0, r0					; r4 <= posCom
+		or r5, r0, r0					; r5 <= posDesc
+		or r6, r0, r0					; r6 <= nBit del mapa de bits
+		
+	cop_8x1_desc:
 
+		;cmp r7, r4, 8
+		;bb1 eq, r7, buc_Comprime		; r4 se queda apuntando al sig char, al 9º (o num 8)
+		;ld.bu r10, r20, r4				; char en r10
+		st.b r10, r8, r5				; guardo r10 en pilaZona3
+		addu r4, r4, 1					; Avanzo posTexto y posPilaZona3%
+		addu r5, r5, 1
 
+		br cop_8x1_desc
+		
 
 
 		or r30, r31, r31
 		POP (r31)
 		POP (r1)
 		jmp(r1)
+
+
+
+
+
+
+
+
+
 
 LongCad:
 		PUSH (r1)
