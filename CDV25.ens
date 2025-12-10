@@ -132,7 +132,7 @@ Comprime:
 		PUSH (r1)
 		PUSH (r31)						; Creo el marco de pila
 		or r31, r30, r30				; 
-		subu r30, r30, 28				; Reservo espacio para guardar texto, cmprdo, nBit, pos_pilaZona3ytexto, pilaZona3, longcadena
+		subu r30, r30, 28				; Reservo espacio para guardar texto, cmprdo, nBit, posTexto, posPilaZona3, longcadena, P
 		or r29, r0, r0					; Como la mayoria de subrutinas devuelven el res en r29, me aseguro
 										; que este iniciado a 0, aunq ya lo hago dentro de casi todas las subrutinas
 
@@ -155,16 +155,17 @@ Comprime:
 
 		; 2 Reservar espacio vl pilaZona3
 
-		addu r4, r4, 3					; sumo 3 para que div y mulu ajusten por exceso en vez de "truncar"
+		addu r4, r3, 3					; sumo 3 para que div y mulu ajusten por exceso en vez de "truncar"
 		divu r4, r4, 4
 		mulu r4, r4, 4					; en r4 <- num de bytes de texto ajustado por exceso a mult de 4
 		subu r30, r30, r4				; se reservan r4 bytes vl
 
 		; 3 Iniz variables
 
-		or r4, r0, r0					; r4 <= pos_pilaZona3ytexto
+		or r4, r0, r0					; r4 <= posTexto
+		or r5, r0, r0					; r5 <= posPilaZona3
 		or r6, r0, r0					; r6 <= nBit del mapa de bits
-		or r8, r30, r0					; r8 <- comienzo pilaZona3				COMPROBAR, NO SE SI APUNTA A LONGCAD O VACIO
+		or r8, r30, r0					; r8 <- comienzo pilaZona3
 		addu r21, r21, 5				; r21 <-salto la cabecera y apunta al princicipo del mapa de bits
 
 		; 4 Copia de los 8xM (M=1) chars iniciales de texto al comienzo de pilaZona3
@@ -174,8 +175,10 @@ Comprime:
 		cmp r7, r4, 8
 		bb1 eq, r7, buc_Comprime		; r4 se queda apuntando al sig char, al 9º (o num 8)
 		ld.bu r10, r20, r4				; char en r10
-		st.b r10, r8, r4				; guardo r10 en pilaZona3
-		addu r4, r4, 1					; Avanzo pos en texto y pilaZona3, uso r4 como contador
+		st.b r10, r8, r5				; guardo r10 en pilaZona3
+		addu r4, r4, 1					; Avanzo posTexto y posPilaZona3%
+		addu r5, r5, 1
+
 		br cop_8x1
 		
 
@@ -185,7 +188,7 @@ Comprime:
 
 		ld.bu r9, r20, r4
 		cmp r7, r9, 0					; comprobar si ha llegado al final de texto
-		bb1 eq, r7, fin_comprime
+		bb1 eq, r7, cabecera
 		
 			; si nBit multiplo de 8, iniciar a 0x00 el byte en el que esta contenido
 
@@ -196,24 +199,119 @@ Comprime:
 		divu r15, r6, 8					; nBit/8 = byte al q pertenece el bit
 		st.b r0, r21, r15				; pone el byte a 0
 
-			; localizar sig subcadena repetida llamando a BuscaMax (texto, pos, Dir(P))
+		; localizar sig subcadena repetida llamando a BuscaMax (texto, pos, Dir(P))
+
+
+	no_mult_de_8:
 
 		st r6, r31, -12					; r31-12 <= nBit (r6)
-		st r4, r31, -16					; r31-16 <= pos texto y pos pilaZona3 (r4)
-		st r8, r31, -20					; r31-20 <= princicipo pilaZona3 (r8)
-		st r3, r31, -24					; r31-24 <= long de texto (r3)
+		st r4, r31, -16					; r31-16 <= posTexto (r4)
+		st r5, r31, -20					; r31-20 <= posPilaZona3(r5)
+		st r3, r31, -24					; r31-24 <= longTexto (r3)
 
-		no_mult_de_8:
+		subu  r10, r31, 28				; Dir(P) en r10, hueco que he guardado al princicipo de Comprime
 
+		PUSH (r10)						; Dir(P)
+		PUSH (r4)						; max (posTexto)
+		PUSH (r20)						; ref (texto)
+		bsr BuscaMax
+		POP (r20)
+		POP (r4)
+		POP (r10)
 
+		ld r10, r31, -28				; r10 <- Pos inicio subcadena (P)
+
+		ld r6, r31, -12					; r31-12 <= nBit (r6)
+		ld r4, r31, -16					; r31-16 <= posTexto (r4)
+		ld r5, r31, -20					; r31-20 <= posPilaZona3(r5)
+		ld r3, r31, -24					; r31-24 <= longTexto (r3)
+
+		cmp r7, r29, 4
+		bb1 lt, r7, menor_de_4
+
+		PUSH (r6)
+		PUSH (r21)
+		bsr PoneBitA1					;
+		POP (r21)
+		POP (r6)
+
+		or r11, r10, r0					; r11 <- P
+
+		; necesito el low y el high de P para le formato O_l - O_h - L  de zona3
+
+		mask r12, r11, 0xFF				; low
+		divu r13, r11, 256				; high (sig byte (0-255) por eso div entre 256)
+		st.b r12, r8, r5				; pilaZona3[posPilaZona3] = O_l
+		addu r5, r5, 1					; avanzar posPilaZona3
+
+		st.b r13, r8, r5				; pilaZona3[posPilaZona3] = O_h
+		addu r5, r5, 1					; avanzar posPilaZona3
+
+		st.b r29, r8, r5				; pilaZona3[posPilaZona3] = L
+		addu r5, r5, 1					; avanzar posPilaZona3
+
+		addu r4, r4, r29				; posTexto += L
+		addu r6, r6, 1					; nBit ++
+
+		br buc_Comprime
+		
+	menor_de_4:
+
+		ld.bu r10, r20, r4
+		st.b r10, r8, r5
+		addu r4, r4, 1
+		addu r5, r5, 1
+		addu r6, r6, 1
+
+		br buc_Comprime
+
+	cabecera:
 
 		; 6 rellenar cabecera de comprdo
 
+		ld r21, r31, 8 				; r21 <- cmprdo
+
+		mask r10, r3, 0xFF
+		st.b r10, r21, 0				; guardo low(longTexto) [0]
+
+		divu r10, r3, 256
+		mask r10, r10, 0xFF
+		st.b r10, r21, 1				;guardo high(longTexto) [1]
+
+		or r10, r0, 1
+		st.b r10, r21, 2				; guardar M=1			[2]
+
+		addu r10, r6, 7
+		divu r10, r10, 8				; calculo num Bytes del mapa (por exceso)
+		addu r10, r10, 5				; +5 bytes de cabecera
+
+		mask r12, r10, 0xFF
+		st.b r12, r21, 3				; low(bytes)			[3]
+
+		divu r13, r10, 256
+		mask r13, r13, 0xFF	
+		st.b r13, r21, 4				; high(bytes)			[4]	
+
 		; 7 Copiar pilaZona3 en cmprdo tras mapa de bytes
+
+		ld r10, r31, -32 			; recuperar el num bytes (-28 - 4 = -32)
+		addu r16, r21, r10			;
+		or r17, r0, r0
+
+		buc_copiar:
+
+		cmp r7, r17, r5
+		bb1 eq, r7, fin_copia
+		ld.bu r19, r8, r17
+		st.b r19, r16, r17
+		addu r17, r17, 1
+		br buc_copiar
+
+		fin_copiar:
 
 		; 8 valores de retorno
 
-	fin_comprime:
+		addu r29, r10, r5		
 
 		or r30, r31, r31		; destruir marco de pila
 		POP (r31)
