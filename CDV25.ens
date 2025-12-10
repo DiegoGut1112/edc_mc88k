@@ -131,13 +131,13 @@ Comprime:
 
 		PUSH (r1)
 		PUSH (r31)						; Creo el marco de pila
-		or r31, r30, r30				; para poder llamar a subrutinas sin problemas
-		subu r30, r30, 8				; reservo espacio para guardar texto y cmprdo y pilaZona3
-		or r29, r0, r0					; como la mayoria de subrutinas devuelven el res en r29, me aseguro
+		or r31, r30, r30				; 
+		subu r30, r30, 28				; Reservo espacio para guardar texto, cmprdo, nBit, pos_pilaZona3ytexto, pilaZona3, longcadena
+		or r29, r0, r0					; Como la mayoria de subrutinas devuelven el res en r29, me aseguro
 										; que este iniciado a 0, aunq ya lo hago dentro de casi todas las subrutinas
 
-		ld r20, r30, 8					; texto <- r20
-		ld r21, r30, 12					; cmprdo <- r21
+		ld r20, r31, 8					; texto <- r20
+		ld r21, r31, 12					; cmprdo <- r21
 
 		; 1 Determinar long de texto llamando a LongCad
 
@@ -151,38 +151,59 @@ Comprime:
 		ld r20, r31, -4					; texto <- r20
 		ld r21, r31, -8					; cmprdo <- r21
 
-		cmp r7, r29, -1
-		bb1 eq, r7, fin_comprime		; REVISAR comprobacion 
 		or r3, r29, r29					; guardo la long de la cadena en r3
 
 		; 2 Reservar espacio vl pilaZona3
 
-		divu r4, r3, 4
+		addu r4, r4, 3					; sumo 3 para que div y mulu ajusten por exceso en vez de "truncar"
+		divu r4, r4, 4
 		mulu r4, r4, 4					; en r4 <- num de bytes de texto ajustado por exceso a mult de 4
 		subu r30, r30, r4				; se reservan r4 bytes vl
 
 		; 3 Iniz variables
 
-		or r5, r0, r0					; r5 <= desplazamiento/contador 1
-		or r4, r0, r0					; r4 <= desplazamiento/contador 2
+		or r4, r0, r0					; r4 <= pos_pilaZona3ytexto
 		or r6, r0, r0					; r6 <= nBit del mapa de bits
-		subu r8, r31, 12				; r8 <- pilaZona3
+		or r8, r30, r0					; r8 <- comienzo pilaZona3				COMPROBAR, NO SE SI APUNTA A LONGCAD O VACIO
+		addu r21, r21, 5				; r21 <-salto la cabecera y apunta al princicipo del mapa de bits
 
 		; 4 Copia de los 8xM (M=1) chars iniciales de texto al comienzo de pilaZona3
 
 	cop_8x1:
 
 		cmp r7, r4, 8
-		bb1 eq, r7, buc_Comprime		
-		ld.bu r10, r20, r4				; cargo char en r10
+		bb1 eq, r7, buc_Comprime		; r4 se queda apuntando al sig char, al 9º (o num 8)
+		ld.bu r10, r20, r4				; char en r10
 		st.b r10, r8, r4				; guardo r10 en pilaZona3
-		addu r4, r4, 1					; Avanzo pos en texto y pilaZona3 y uso r4 como contador
+		addu r4, r4, 1					; Avanzo pos en texto y pilaZona3, uso r4 como contador
 		br cop_8x1
 		
 
 		; 5 Algoritmo compirmir
 
 	buc_Comprime:
+
+		ld.bu r9, r20, r4
+		cmp r7, r9, 0					; comprobar si ha llegado al final de texto
+		bb1 eq, r7, fin_comprime
+		
+			; si nBit multiplo de 8, iniciar a 0x00 el byte en el que esta contenido
+
+		mask r16, r6, 7					; el 7 es 0111, y para que un num sea mult de 8 debe acabar en  X000, 
+		cmp r7, r16, 0					; por tanto si es mult debe quedar 0000 en r16
+		bb1 ne, r7, no_mult_de_8
+		
+		divu r15, r6, 8					; nBit/8 = byte al q pertenece el bit
+		st.b r0, r21, r15				; pone el byte a 0
+
+			; localizar sig subcadena repetida llamando a BuscaMax (texto, pos, Dir(P))
+
+		st r6, r31, -12					; r31-12 <= nBit (r6)
+		st r4, r31, -16					; r31-16 <= pos texto y pos pilaZona3 (r4)
+		st r8, r31, -20					; r31-20 <= princicipo pilaZona3 (r8)
+		st r3, r31, -24					; r31-24 <= long de texto (r3)
+
+		no_mult_de_8:
 
 
 
@@ -198,6 +219,27 @@ Comprime:
 		POP (r31)
 		POP (r1)
 		jmp(r1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Descomprime:    jmp(r1)
 
