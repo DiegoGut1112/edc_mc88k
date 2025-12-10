@@ -254,7 +254,7 @@ Comprime:
 		addu r6, r6, 1					; nBit ++
 
 		br buc_Comprime
-		
+
 	menor_de_4:
 
 		ld.bu r10, r20, r4
@@ -339,7 +339,21 @@ Comprime:
 
 
 
-Descomprime:    jmp(r1)
+Descomprime:   
+
+		PUSH (r1)
+		PUSH (r31)
+		or r31, r30, r30
+
+
+
+
+
+
+		or r30, r31, r31
+		POP (r31)
+		POP (r1)
+		jmp(r1)
 
 LongCad:
 		PUSH (r1)
