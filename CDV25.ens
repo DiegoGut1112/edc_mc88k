@@ -51,6 +51,10 @@ org 4000
 ;dirPoneBItA1: data 0xFFFFFF00
 ;mapaBits: data 0x54		; 0101 0100
 
+
+texto: data "trestristestigrescomentrigoenuntrigal\0"
+comprdo:    res  256           ; reserva 256 bytes para el comprimido
+
 START:
 
 	; Pruebas
@@ -133,8 +137,7 @@ Comprime:
 		PUSH (r31)						; Creo el marco de pila
 		or r31, r30, r30				; 
 		subu r30, r30, 28				; Reservo espacio para guardar texto, cmprdo, nBit, posTexto, posPilaZona3, longcadena, P
-		or r29, r0, r0					; Como la mayoria de subrutinas devuelven el res en r29, me aseguro
-										; que este iniciado a 0, aunq ya lo hago dentro de casi todas las subrutinas
+		or r29, r0, r0
 
 		ld r20, r31, 8					; texto <- r20
 		ld r21, r31, 12					; cmprdo <- r21
@@ -152,10 +155,11 @@ Comprime:
 		ld r21, r31, -8					; cmprdo <- r21
 
 		or r3, r29, r29					; guardo la long de la cadena en r3
+		st r3, r31, -24					
 
 		; 2 Reservar espacio vl pilaZona3
 
-		addu r4, r3, 3					; sumo 3 para que div y mulu ajusten por exceso en vez de "truncar"
+		addu r4, r3, 3					; sumo 3 para que dal truncar con divu (seguido de mulu) se ajuste por exceso
 		divu r4, r4, 4
 		mulu r4, r4, 4					; en r4 <- num de bytes de texto ajustado por exceso a mult de 4
 		subu r30, r30, r4				; se reservan r4 bytes vl
@@ -173,26 +177,35 @@ Comprime:
 	cop_8x1_comp:
 
 		cmp r7, r4, 8
-		bb1 eq, r7, buc_Comprime		; r4 se queda apuntando al sig char, al 9º (o num 8)
+		bb1 eq, r7, fin_copiar8x1_comp		; r4 se queda apuntando al sig char, al 9º (o num 8)
 		ld.bu r10, r20, r4				; char en r10
 		st.b r10, r8, r5				; guardo r10 en pilaZona3
-		addu r4, r4, 1					; Avanzo posTexto y posPilaZona3%
+		addu r4, r4, 1					; Avanzo posTexto y posPilaZona3
 		addu r5, r5, 1
 
 		br cop_8x1_comp
+
+	fin_copiar8x1_comp:
+
+		st r4, r31, -16
+		st r5, r31, -20
 
 		; 5 Algoritmo compirmir
 
 	buc_Comprime:
 
+		ld r4, r31, -16        	 		; posTexto
+        ld r3, r31, -24          		; longTexto
+
+		or r29, r29, 0
 		ld.bu r9, r20, r4
 		cmp r7, r9, 0					; comprobar si ha llegado al final de texto
 		bb1 eq, r7, cabecera
 		
-			; si nBit multiplo de 8, iniciar a 0x00 el byte en el que esta contenido
+		; si nBit multiplo de 8, iniciar a 0x00 el byte en el que esta contenido de mapabits
 
 		mask r16, r6, 7					; el 7 es 0111, y para que un num sea mult de 8 debe acabar en  X000, 
-		cmp r7, r16, 0					; por tanto si es mult debe quedar 0000 en r16
+		cmp r7, r16, 0					; por tanto si es mult debe quedar 0000 en r16 tras un and (mask)
 		bb1 ne, r7, no_mult_de_8
 		
 		divu r15, r6, 8					; nBit/8 = byte al q pertenece el bit
@@ -228,21 +241,27 @@ Comprime:
 		cmp r7, r29, 4
 		bb1 lt, r7, menor_de_4
 
+		; L >= 4
+
 		PUSH (r6)
 		PUSH (r21)
-		bsr PoneBitA1					;
+		bsr PoneBitA1					; Actualizar bit en el mapa d ebits
 		POP (r21)
 		POP (r6)
 
-		or r11, r10, r0					; r11 <- P
+		ld r6, r31, -12					; r31-12 <= nBit (r6)
+		ld r4, r31, -16					; r31-16 <= posTexto (r4)
+		ld r5, r31, -20					; r31-20 <= posPilaZona3(r5)
+		ld r3, r31, -24					; r31-24 <= longTexto (r3)
+		ld r10, r31, -28				; r10 <- Pos inicio subcadena (P)
 
 		; necesito el low y el high de P para le formato O_l - O_h - L  de zona3
 
-		mask r12, r11, 0xFF				; low
-		divu r13, r11, 256				; high (sig byte (0-255) por eso div entre 256)
+		mask r12, r10, 0xFF				; low
+		divu r13, r10, 256				; high (paso a sig byte(0-255) por eso divu entre 256)
+
 		st.b r12, r8, r5				; pilaZona3[posPilaZona3] = O_l
 		addu r5, r5, 1					; avanzar posPilaZona3
-
 		st.b r13, r8, r5				; pilaZona3[posPilaZona3] = O_h
 		addu r5, r5, 1					; avanzar posPilaZona3
 
@@ -251,6 +270,10 @@ Comprime:
 
 		addu r4, r4, r29				; posTexto += L
 		addu r6, r6, 1					; nBit ++
+
+		st r4, r31, -16
+        st r5, r31, -20
+        st r6, r31, -12
 
 		br buc_Comprime
 
@@ -262,42 +285,48 @@ Comprime:
 		addu r5, r5, 1
 		addu r6, r6, 1
 
+		st  r4, r31, -16
+        st  r5, r31, -20
+        st  r6, r31, -12
+
 		br buc_Comprime
 
 	cabecera:
 
 		; 6 rellenar cabecera de comprdo
 
-		ld r21, r31, 8 				; r21 <- cmprdo
+		ld r21, r31, 8 					; r21 <- cmprdo
+		ld  r3,  r31, -24         		; longTexto
+        ld  r6,  r31, -12         		; nBit
+        ld  r5,  r31, -20         		; posPilaZona3
 
 		mask r10, r3, 0xFF
-		st.b r10, r21, 0				; guardo low(longTexto) [0]
+		st.b r10, r21, 0				; guardo low(longTexto) en cmprdo[0]
 
 		divu r10, r3, 256
 		mask r10, r10, 0xFF
-		st.b r10, r21, 1				;guardo high(longTexto) [1]
+		st.b r10, r21, 1				;guardo high(longTexto) en cmprdo[1]
 
 		or r10, r0, 1
-		st.b r10, r21, 2				; guardar M=1			[2]
+		st.b r10, r21, 2				; guardar M=1			en cmprdo[2]
 
 		addu r10, r6, 7
 		divu r10, r10, 8				; calculo num Bytes del mapa (por exceso)
 		addu r10, r10, 5				; +5 bytes de cabecera
 
 		mask r12, r10, 0xFF
-		st.b r12, r21, 3				; low(bytes)			[3]
+		st.b r12, r21, 3				; low(nbytesMapa)		en cmprdo[3]
 
 		divu r13, r10, 256
 		mask r13, r13, 0xFF	
-		st.b r13, r21, 4				; high(bytes)			[4]	
+		st.b r13, r21, 4				; high(nbytesMapa)		en comrdo[4]	
 
-		; 7 Copiar pilaZona3 en cmprdo tras mapa de bytes
+		; 7 Copiar pilaZona3 en cmprdo tras el mapa de bits
 
-		ld r10, r31, -32 			; recuperar el num bytes (-28 - 4 = -32)
-		addu r16, r21, r10			;
+		addu r16, r21, r10			; r16 apunta al final del mapa de bits
 		or r17, r0, r0
 
-		buc_copiar:
+	buc_copiar:
 
 		cmp r7, r17, r5
 		bb1 eq, r7, fin_copia
@@ -306,29 +335,16 @@ Comprime:
 		addu r17, r17, 1
 		br buc_copiar
 
-		fin_copiar:
+	fin_copiar:
 
 		; 8 valores de retorno
 
-		addu r29, r10, r5		
+		addu r29, r10, r5		; size(cabecar y mapa)  + 	size(chars y referencias)
 
 		or r30, r31, r31		; destruir marco de pila
 		POP (r31)
 		POP (r1)
 		jmp(r1)
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -348,7 +364,7 @@ Descomprime:
 		or r5, r0, r0					; r5 <= posDesc
 		or r6, r0, r0					; r6 <= nBit del mapa de bits
 		
-	cop_8x1_desc:
+	;cop_8x1_desc:
 
 		;cmp r7, r4, 8
 		;bb1 eq, r7, buc_Comprime		; r4 se queda apuntando al sig char, al 9º (o num 8)
@@ -365,13 +381,6 @@ Descomprime:
 		POP (r31)
 		POP (r1)
 		jmp(r1)
-
-
-
-
-
-
-
 
 
 
